@@ -16,6 +16,7 @@ using namespace System::IO;
 using namespace System::Runtime::InteropServices;
 
 int getSettingFromIni(String^, String^, int, String^);
+bool Atc = false;
 
 SerialWrapper * arduino;
 
@@ -52,12 +53,21 @@ ATS_API void WINAPI Initialize(int brake)
 	arduino = new SerialWrapper(mcPort);
 
 	// ATS-P パネル部品番号情報取得
-	mcPortNum[2] = getSettingFromIni("AtsP", "Power", 2, iniPath);
-	mcPortNum[3] = getSettingFromIni("AtsP", "Pattern", 3, iniPath);
-	mcPortNum[4] = getSettingFromIni("AtsP", "Break", 4, iniPath);
-	mcPortNum[5] = getSettingFromIni("AtsP", "Release", 5, iniPath);
-	mcPortNum[6] = getSettingFromIni("AtsP", "Active", 6, iniPath);
-	mcPortNum[7] = getSettingFromIni("AtsP", "Fail", 7, iniPath);
+	mcPortNum[2] = getSettingFromIni("AtsP", "Power", 0, iniPath);
+	mcPortNum[3] = getSettingFromIni("AtsP", "Pattern", 0, iniPath);
+	mcPortNum[4] = getSettingFromIni("AtsP", "Break", 0, iniPath);
+	mcPortNum[5] = getSettingFromIni("AtsP", "Release", 0, iniPath);
+	mcPortNum[6] = getSettingFromIni("AtsP", "Active", 0, iniPath);
+	mcPortNum[7] = getSettingFromIni("AtsP", "Fail", 0, iniPath);
+	
+	// ATC現示ベルサウンドの検出
+	mcPortNum[10] = getSettingFromIni("Atc", "Bell", 0, iniPath);
+
+	// ATC/ATS排他利用
+	if (mcPortNum[10] != 0)
+	{
+		Atc = true;
+	}
 
 	if (!arduino->IsConnected())
 	{
@@ -90,14 +100,28 @@ ATS_API ATS_HANDLES WINAPI Elapse(ATS_VEHICLESTATE vehicleState, int *panel, int
 	output.Reverser = reverser;
 	output.ConstantSpeed = ATS_CONSTANTSPEED_CONTINUE;
 
-	for (int i = 2; i<8; i++)
+	// ATCが有効の場合は、ATS-P/Sxは変化を現示変化など検出しない
+	if (Atc)
 	{
-		if (prevState[i] != panel[i])
+		if (prevState[mcPortNum[10]] != sound[mcPortNum[10]])
 		{
 			char buff[10] = "";
-			sprintf_s(buff, "%d,%d\n", mcPortNum[i], panel[i]);
+			sprintf_s(buff, "%d,1\n", mcPortNum[10]);
 			arduino->write(buff);
-			prevState[i] = panel[i];
+			prevState[mcPortNum[10]] = sound[mcPortNum[10]];
+		}
+	}
+	else{
+		// ATS-P現示変化検出
+		for (int i = 2; i < 8; i++)
+		{
+			if (prevState[i] != panel[i])
+			{
+				char buff[10] = "";
+				sprintf_s(buff, "%d,%d\n", mcPortNum[i], panel[i]);
+				arduino->write(buff);
+				prevState[i] = panel[i];
+			}
 		}
 	}
 
