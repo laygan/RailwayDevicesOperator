@@ -88,7 +88,7 @@ SerialWrapper::~SerialWrapper()
 
 size_t SerialWrapper::write(const char buf[])
 {
-	DWORD lengthOfSent = sizeof(buf); // 送信するbyte数
+	DWORD lengthOfSent = strnlen_s(buf, 6); // 送信するbyte数
 	DWORD numberOfPut; // 実際に送信したbyte数
 
 	// ポートへ送信

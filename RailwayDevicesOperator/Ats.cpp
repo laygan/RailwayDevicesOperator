@@ -16,12 +16,69 @@ using namespace System::IO;
 using namespace System::Runtime::InteropServices;
 
 int getSettingFromIni(String^, String^, int, String^);
-bool Atc = false;
 
 SerialWrapper * arduino;
+bool Atc = false;
 
 ATS_API void WINAPI Load()
 {
+	// 設定ファイルを読み込み
+	String^ dllPath = System::Reflection::Assembly::GetExecutingAssembly()->Location;
+	String^ dllDir = Path::GetDirectoryName(dllPath);
+	String^ iniPath = Path::GetDirectoryName(dllPath) + Path::DirectorySeparatorChar + Path::GetFileNameWithoutExtension(dllPath) + ".ini";
+
+	// マイコン通信用シリアルポート番号取得
+	int mcPort = getSettingFromIni("MC", "ComPort", 7, iniPath);
+
+	// arduinoシリアル通信開始
+	arduino = new SerialWrapper(mcPort);
+
+	
+	AtsInfo[0] = getSettingFromIni("AtsSx", "Power", 0, iniPath);
+	AtsInfo[1] = getSettingFromIni("AtsSx", "Active", 1, iniPath);
+
+	// ATS-P パネル部品番号情報取得
+	AtsInfo[2] = getSettingFromIni("AtsP", "Power", 2, iniPath);
+	AtsInfo[3] = getSettingFromIni("AtsP", "Pattern", 3, iniPath);
+	AtsInfo[4] = getSettingFromIni("AtsP", "Break", 4, iniPath);
+	AtsInfo[5] = getSettingFromIni("AtsP", "Release", 5, iniPath);
+	AtsInfo[6] = getSettingFromIni("AtsP", "Active", 6, iniPath);
+	AtsInfo[7] = getSettingFromIni("AtsP", "Fail", 7, iniPath);
+
+	// ATC現示ベルサウンドの検出
+	AtsInfo[8] = getSettingFromIni("Atc", "Bell", -1, iniPath);
+	AtsInfo[9] = getSettingFromIni("Atc", "Break", 23, iniPath);
+
+	// Atcベルサウンドの検出が行われるかどうか
+	if (AtsInfo[8] != -1)
+	{
+		Atc = true;
+	}
+
+	// マイコン接続
+	if (!arduino->IsConnected())
+	{
+		MessageBoxA(NULL, "ERROR: Cannot connect to controller.", "RailwayDevicesOperator.dll", MB_OK);
+		exit(1);
+	}
+
+	// handshake
+	while (true)
+	{
+		if (arduino->read() == '1')
+		{
+			break;
+		}
+	}
+	arduino->write("0\n");
+	while (true)
+	{
+		if (arduino->read() == '1')
+		{
+			Sleep(1000);
+			break;
+		}
+	}
 }
 
 ATS_API void WINAPI Dispose()
@@ -41,56 +98,6 @@ ATS_API void WINAPI SetVehicleSpec(ATS_VEHICLESPEC vehicleSpec)
 
 ATS_API void WINAPI Initialize(int brake)
 {	
-	// 設定ファイルを読み込み
-	String^ dllPath = System::Reflection::Assembly::GetExecutingAssembly()->Location;
-	String^ dllDir = Path::GetDirectoryName(dllPath);
-	String^ iniPath = Path::GetDirectoryName(dllPath) + Path::DirectorySeparatorChar + Path::GetFileNameWithoutExtension(dllPath) + ".ini";
-
-	// マイコン通信用シリアルポート番号取得
-	int mcPort = getSettingFromIni("MC", "ComPort", 7, iniPath);
-
-	// arduinoシリアル通信開始
-	arduino = new SerialWrapper(mcPort);
-
-	// ATS-P パネル部品番号情報取得
-	mcPortNum[2] = getSettingFromIni("AtsP", "Power", 0, iniPath);
-	mcPortNum[3] = getSettingFromIni("AtsP", "Pattern", 0, iniPath);
-	mcPortNum[4] = getSettingFromIni("AtsP", "Break", 0, iniPath);
-	mcPortNum[5] = getSettingFromIni("AtsP", "Release", 0, iniPath);
-	mcPortNum[6] = getSettingFromIni("AtsP", "Active", 0, iniPath);
-	mcPortNum[7] = getSettingFromIni("AtsP", "Fail", 0, iniPath);
-	
-	// ATC現示ベルサウンドの検出
-	mcPortNum[10] = getSettingFromIni("Atc", "Bell", 0, iniPath);
-
-	// ATC/ATS排他利用
-	if (mcPortNum[10] != 0)
-	{
-		Atc = true;
-	}
-
-	if (!arduino->IsConnected())
-	{
-		MessageBoxA(NULL, "ERROR: Cannot connect to controller.", "RailwayDevicesOperator.dll", MB_OK);
-		exit(1);
-	}
-
-	while (true)
-	{
-		if (arduino->read() == '1')
-		{
-			break;
-		}
-	}
-	arduino->write("0\n");
-	while (true)
-	{
-		if (arduino->read() == '1')
-		{
-			Sleep(1000);
-			break;
-		}
-	}
 }
 
 ATS_API ATS_HANDLES WINAPI Elapse(ATS_VEHICLESTATE vehicleState, int *panel, int *sound)
@@ -100,27 +107,29 @@ ATS_API ATS_HANDLES WINAPI Elapse(ATS_VEHICLESTATE vehicleState, int *panel, int
 	output.Reverser = reverser;
 	output.ConstantSpeed = ATS_CONSTANTSPEED_CONTINUE;
 
-	// ATCが有効の場合は、ATS-P/Sxは変化を現示変化など検出しない
+	// Active ATC?
 	if (Atc)
 	{
-		if (prevState[mcPortNum[10]] != sound[mcPortNum[10]])
+		if (prevState[8] != sound[AtsInfo[8]])
 		{
 			char buff[10] = "";
-			sprintf_s(buff, "%d,1\n", mcPortNum[10]);
+			sprintf_s(buff, "%d,%d\n", mcPortNum[8], sound[AtsInfo[8]]);
 			arduino->write(buff);
-			prevState[mcPortNum[10]] = sound[mcPortNum[10]];
+			prevState[8] = sound[AtsInfo[8]];
 		}
 	}
-	else{
-		// ATS-P現示変化検出
-		for (int i = 2; i < 8; i++)
+
+	else
+	{
+		// ATS現示変化検出
+		for (int i = 0; i < 8; i++)
 		{
-			if (prevState[i] != panel[i])
+			if (prevState[i] != panel[AtsInfo[i]])
 			{
 				char buff[10] = "";
-				sprintf_s(buff, "%d,%d\n", mcPortNum[i], panel[i]);
+				sprintf_s(buff, "%d,%d\n", mcPortNum[i], panel[AtsInfo[i]]);
 				arduino->write(buff);
-				prevState[i] = panel[i];
+				prevState[i] = panel[AtsInfo[i]];
 			}
 		}
 	}
