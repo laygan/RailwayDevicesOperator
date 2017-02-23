@@ -18,7 +18,8 @@ using namespace System::Runtime::InteropServices;
 int getSettingFromIni(String^, String^, int, String^);
 
 SerialWrapper * arduino;
-bool Atc = false;
+
+bool purgeBZ21 = false;
 
 ATS_API void WINAPI Load()
 {
@@ -33,27 +34,26 @@ ATS_API void WINAPI Load()
 	// arduinoシリアル通信開始
 	arduino = new SerialWrapper(mcPort);
 
-	
-	AtsInfo[0] = getSettingFromIni("AtsSx", "Power", 0, iniPath);
-	AtsInfo[1] = getSettingFromIni("AtsSx", "Active", 1, iniPath);
+	// ATS-Sx サウンド | 車両パネル部品 監視設定
+	AtsInfo[0] = getSettingFromIni("AtsSx", "Power", -1, iniPath);		// 白
+	AtsInfo[1] = getSettingFromIni("AtsSx", "Active", -1, iniPath);		// 赤
+	AtsInfo[8] = getSettingFromIni("AtsSx", "Bell", -1, iniPath);		// ATSベル検出（EB非常作動時にも正しく鳴らすため）
 
-	// ATS-P パネル部品番号情報取得
-	AtsInfo[2] = getSettingFromIni("AtsP", "Power", 2, iniPath);
-	AtsInfo[3] = getSettingFromIni("AtsP", "Pattern", 3, iniPath);
-	AtsInfo[4] = getSettingFromIni("AtsP", "Break", 4, iniPath);
-	AtsInfo[5] = getSettingFromIni("AtsP", "Release", 5, iniPath);
-	AtsInfo[6] = getSettingFromIni("AtsP", "Active", 6, iniPath);
-	AtsInfo[7] = getSettingFromIni("AtsP", "Fail", 7, iniPath);
+	// ATS-P サウンド | 車両パネル部品 監視設定
+	AtsInfo[2] = getSettingFromIni("AtsP", "Power", -1, iniPath);		// P電源
+	AtsInfo[3] = getSettingFromIni("AtsP", "Pattern", -1, iniPath);		// パターン接近
+	AtsInfo[4] = getSettingFromIni("AtsP", "Break", -1, iniPath);		// ブレーキ動作（常用,非常兼用）
+	AtsInfo[5] = getSettingFromIni("AtsP", "Release", -1, iniPath);		// ブレーキ開放
+	AtsInfo[6] = getSettingFromIni("AtsP", "Active", -1, iniPath);		// ATS-P
+	AtsInfo[7] = getSettingFromIni("AtsP", "Fail", -1, iniPath);		// 故障
+	AtsInfo[9] = getSettingFromIni("AtsP", "Bell", -1, iniPath);		// ding
 
-	// ATC現示ベルサウンドの検出
-	AtsInfo[8] = getSettingFromIni("Atc", "Bell", -1, iniPath);
-	AtsInfo[9] = getSettingFromIni("Atc", "Break", 23, iniPath);
-
-	// Atcベルサウンドの検出が行われるかどうか
-	if (AtsInfo[8] != -1)
+	// ATC サウンド|車両パネル部品 監視設定
+	if (AtsInfo[9] == -1)
 	{
-		Atc = true;
+		AtsInfo[9] = getSettingFromIni("Atc", "Bell", -1, iniPath);		// ding
 	}
+//	AtsInfo[10] = getSettingFromIni("Atc", "Break", -1, iniPath);		// ブレーキ動作表示灯（常用,非常兼用->ATS-P ブレーキ動作）
 
 	// マイコン接続
 	if (!arduino->IsConnected())
@@ -79,6 +79,7 @@ ATS_API void WINAPI Load()
 			break;
 		}
 	}
+	// end of handshake
 }
 
 ATS_API void WINAPI Dispose()
@@ -107,30 +108,54 @@ ATS_API ATS_HANDLES WINAPI Elapse(ATS_VEHICLESTATE vehicleState, int *panel, int
 	output.Reverser = reverser;
 	output.ConstantSpeed = ATS_CONSTANTSPEED_CONTINUE;
 
-	// Active ATC?
-	if (Atc)
+	/***** パネル変化検出部 *****/
+	// ATS現示変化検出
+	for (int i = 0; i <= 7; i++)
 	{
-		if (prevState[8] != sound[AtsInfo[8]])
+		if (AtsInfo[i] == -1) continue;
+		if (prevState[i] != panel[AtsInfo[i]])
 		{
 			char buff[10] = "";
-			sprintf_s(buff, "%d,%d\n", mcPortNum[8], sound[AtsInfo[8]]);
+			sprintf_s(buff, "%d,%d\n", mcPortNum[i], panel[AtsInfo[i]]);
 			arduino->write(buff);
-			prevState[8] = sound[AtsInfo[8]];
+			prevState[i] = panel[AtsInfo[i]];
 		}
 	}
 
+	/*
+	// ATS-Sxチャイム切り離し
+	if (AtsInfo[9] != -1 && panel[AtsInfo[0]] < 1)
+	{
+		if (! purgeBZ21)
+		{
+			char buff[10] = "";
+			sprintf_s(buff, "%d,%d\n", mcPortNum[11], 1);
+			arduino->write(buff);
+		}
+		purgeBZ21 = true;
+	}
 	else
 	{
-		// ATS現示変化検出
-		for (int i = 0; i < 8; i++)
+		if (purgeBZ21)
 		{
-			if (prevState[i] != panel[AtsInfo[i]])
-			{
-				char buff[10] = "";
-				sprintf_s(buff, "%d,%d\n", mcPortNum[i], panel[AtsInfo[i]]);
-				arduino->write(buff);
-				prevState[i] = panel[AtsInfo[i]];
-			}
+			char buff[10] = "";
+			sprintf_s(buff, "%d,%d\n", mcPortNum[11], 0);
+			arduino->write(buff);
+		}
+		purgeBZ21 = false;
+	}
+	*/
+	/***** サウンド変化検出部 *****/
+
+	for (int i = 8; i <= 9 ; i++)
+	{
+		if (AtsInfo[i] == -1) continue;
+		if (prevState[i] != sound[AtsInfo[i]])
+		{
+			char buff[10] = "";
+			sprintf_s(buff, "%d,%d\n", mcPortNum[i], sound[AtsInfo[i]]);
+			arduino->write(buff);
+			prevState[i] = sound[AtsInfo[i]];
 		}
 	}
 
@@ -154,6 +179,26 @@ ATS_API void WINAPI SetReverser(int pos)
 
 ATS_API void WINAPI KeyDown(int atsKeyCode)
 {
+	// for debug
+	if (atsKeyCode == ATS_KEY_B1)
+	{
+		char buff[10] = "";
+		sprintf_s(buff, "%d,%d\n", mcPortNum[7], 0);
+		arduino->write(buff);
+	}
+
+	// BZ21警報停止 ATS_KEY_A1
+	if (atsKeyCode == ATS_KEY_A1) // キーが押されていたら
+	{
+		char buff[10] = "";
+		sprintf_s(buff, "%d,%d\n", mcPortNum[11], 1);
+		arduino->write(buff);
+
+		sprintf_s(buff, "%d,%d\n", mcPortNum[11], 0);
+		arduino->write(buff);
+
+	}
+
 }
 
 ATS_API void WINAPI KeyUp(int atsKeyCode)
