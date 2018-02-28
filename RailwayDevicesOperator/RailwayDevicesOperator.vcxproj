@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
       <Configuration>Debug</Configuration>
@@ -14,18 +14,18 @@
     <ProjectGuid>{E3FF2490-DD6B-4985-8ECB-2E57BB31B19B}</ProjectGuid>
     <RootNamespace>RailwayDevicesOperator</RootNamespace>
     <ProjectName>RailwayDevicesOperator</ProjectName>
-    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <WindowsTargetPlatformVersion>10.0.16299.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
-    <PlatformToolset>v120</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
     <CLRSupport>true</CLRSupport>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
-    <PlatformToolset>v120</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
     <CLRSupport>true</CLRSupport>
   </PropertyGroup>
@@ -48,6 +48,7 @@
     <OutDir>Debug\</OutDir>
     <IntDir>Debug\</IntDir>
     <LinkIncremental>true</LinkIncremental>
+    <LibraryPath>C:\Program Files (x86)\Windows Kits\NETFXSDK\4.6.2\Lib\um\x86;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <OutDir>Release\</OutDir>
